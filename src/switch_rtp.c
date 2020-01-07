@@ -1569,9 +1569,9 @@ static void do_mos(switch_rtp_t *rtp_session) {
 		if (rtp_session->consecutive_flaws++) {
 			int penalty = rtp_session->consecutive_flaws;
 
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG1, "%s %s %d consecutive flaws, adding %d flaw penalty\n",
+			/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG1, "%s %s %d consecutive flaws, adding %d flaw penalty\n",
 							  rtp_session_name(rtp_session), rtp_type(rtp_session),
-							  rtp_session->consecutive_flaws, penalty);
+							  rtp_session->consecutive_flaws, penalty);*/
 			rtp_session->bad_stream++;
 			rtp_session->stats.inbound.flaws += penalty;
 			rtp_session->stats.inbound.last_flaw = rtp_session->stats.inbound.flaws;
@@ -1592,7 +1592,7 @@ static void do_mos(switch_rtp_t *rtp_session) {
 	rtp_session->stats.inbound.R = R;
 	rtp_session->stats.inbound.mos = 1 + (0.035) * R + (.000007) * R * (R-60) * (100-R);
 		
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG3, "%s %s stat %0.2f %ld/%d flaws: %ld mos: %0.2f v: %0.2f %0.2f/%0.2f\n",
+	/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG3, "%s %s stat %0.2f %ld/%d flaws: %ld mos: %0.2f v: %0.2f %0.2f/%0.2f\n",
 					  rtp_session_name(rtp_session),
 					  rtp_type(rtp_session),
 					  rtp_session->stats.inbound.R,
@@ -1602,7 +1602,7 @@ static void do_mos(switch_rtp_t *rtp_session) {
 					  rtp_session->stats.inbound.variance,
 					  rtp_session->stats.inbound.min_variance,
 					  rtp_session->stats.inbound.max_variance
-					  );
+					  );*/
 	
 }
 
@@ -1667,11 +1667,11 @@ static void check_jitter(switch_rtp_t *rtp_session)
 	if (rtp_session->stats.inbound.last_processed_seq > 0 && seq > (int)(rtp_session->stats.inbound.last_processed_seq + 1)) {
 		int lost = (seq - rtp_session->stats.inbound.last_processed_seq - 1);
 
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG1, "%s Got: %s seq %d but expected: %d lost: %d\n",
+		/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG1, "%s Got: %s seq %d but expected: %d lost: %d\n",
 						  rtp_session_name(rtp_session),
 						  rtp_type(rtp_session),
 						  seq,
-						  (rtp_session->stats.inbound.last_processed_seq + 1), lost);
+						  (rtp_session->stats.inbound.last_processed_seq + 1), lost);*/
 		rtp_session->stats.inbound.last_loss++;
 
 		if (rtp_session->flags[SWITCH_RTP_FLAG_VIDEO]) {
@@ -7253,9 +7253,9 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 						if (switch_poll(rtp_session->read_pollfd, 1, &fdr, 0) == SWITCH_STATUS_SUCCESS) {
 							rtp_session->hot_hits++;//+= rtp_session->samples_per_interval;
 
-							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10, "%s Hot Hit %d\n",
+							/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10, "%s Hot Hit %d\n",
 											  rtp_session_name(rtp_session),
-											  rtp_session->hot_hits);
+											  rtp_session->hot_hits);*/
 						} else {
 							rtp_session->hot_hits = 0;
 						}
@@ -7272,10 +7272,10 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 			if (rtp_session->flags[SWITCH_RTP_FLAG_TEXT]) {
 				///NOOP
 			} else if (hot_socket && (rtp_session->hot_hits % 10) != 0) {
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10, "%s timer while HOT\n", rtp_session_name(rtp_session));
+				/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10, "%s timer while HOT\n", rtp_session_name(rtp_session));*/
 				switch_core_timer_next(&rtp_session->timer);
 			} else if (hot_socket) {
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10, "%s skip timer once\n", rtp_session_name(rtp_session));
+				/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10, "%s skip timer once\n", rtp_session_name(rtp_session));*/
 				rtp_session->sync_packets++;
 				switch_core_timer_sync(&rtp_session->timer);
 				reset_jitter_seq(rtp_session);
@@ -7283,10 +7283,10 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 
 				if (rtp_session->sync_packets) {
 
-					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10,
+					/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG10,
 									  "%s Auto-Flush catching up %d packets (%d)ms.\n",
 									  rtp_session_name(rtp_session),
-									  rtp_session->sync_packets, (rtp_session->ms_per_packet * rtp_session->sync_packets) / 1000);
+									  rtp_session->sync_packets, (rtp_session->ms_per_packet * rtp_session->sync_packets) / 1000);*/
 					if (!rtp_session->flags[SWITCH_RTP_FLAG_PAUSE]) {
 						switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG3, "%s syncing %d %s packet(s)\n",
 										 rtp_session_name(rtp_session),
@@ -7862,8 +7862,8 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 				if (!rtp_session->flags[SWITCH_RTP_FLAG_PAUSE] && !rtp_session->flags[SWITCH_RTP_FLAG_DTMF_ON] && !rtp_session->dtmf_data.in_digit_ts
 					&& rtp_session->cng_count > (rtp_session->one_second * 2) && rtp_session->jitter_lead > JITTER_LEAD_FRAMES) {
 
-					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG1, "%s %s timeout\n",
-									  rtp_session_name(rtp_session), rtp_type(rtp_session));
+					/*switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_DEBUG1, "%s %s timeout\n",
+									  rtp_session_name(rtp_session), rtp_type(rtp_session));*/
 
 					if (rtp_session->media_timeout && rtp_session->last_media) {
 						check_timeout(rtp_session);

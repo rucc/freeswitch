@@ -877,7 +877,7 @@ long sofia_reg_uniform_distribution(int max)
 	srand((unsigned)((intptr_t) switch_thread_self() + switch_micro_time_now()));
 	result = (int)((double)rand() / (((double)RAND_MAX + (double)1) / range));
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG9, "Generated random %ld, max is %d\n", (long) result, max);
+	/*switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG9, "Generated random %ld, max is %d\n", (long) result, max);*/
 	return (long) result;
 }
 
@@ -941,7 +941,7 @@ void sofia_reg_check_ping_expire(sofia_profile_t *profile, time_t now, int inter
 
 		/* only update if needed */
 		if (count) {
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG9, "Updating ping expires for profile %s\n", profile->name);
+			/*switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG9, "Updating ping expires for profile %s\n", profile->name);*/
 			irand = mean + sofia_reg_uniform_distribution(interval);
 			next = (long) now + irand;
 

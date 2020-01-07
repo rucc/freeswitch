@@ -580,11 +580,11 @@ SWITCH_DECLARE(switch_status_t) _switch_cache_db_get_db_handle(switch_cache_db_h
 
 	if ((new_dbh = get_handle(db_str, db_callsite_str, thread_str))) {
 		if (type == SCDB_TYPE_DATABASE_INTERFACE) {
-			switch_log_printf(SWITCH_CHANNEL_ID_LOG, file, func, line, NULL, SWITCH_LOG_DEBUG10,
-				"Reuse Unused Cached DB handle %s [Database interface prefix: %s]\n", new_dbh->name, connection_options->database_interface_options.prefix);
+			/*switch_log_printf(SWITCH_CHANNEL_ID_LOG, file, func, line, NULL, SWITCH_LOG_DEBUG10,
+				"Reuse Unused Cached DB handle %s [Database interface prefix: %s]\n", new_dbh->name, connection_options->database_interface_options.prefix);*/
 		} else {
-			switch_log_printf(SWITCH_CHANNEL_ID_LOG, file, func, line, NULL, SWITCH_LOG_DEBUG10,
-				"Reuse Unused Cached DB handle %s [%s]\n", new_dbh->name, switch_cache_db_type_name(new_dbh->type));
+			/*switch_log_printf(SWITCH_CHANNEL_ID_LOG, file, func, line, NULL, SWITCH_LOG_DEBUG10,
+				"Reuse Unused Cached DB handle %s [%s]\n", new_dbh->name, switch_cache_db_type_name(new_dbh->type));*/
 		}
 	} else {
 		switch_core_db_t *db = NULL;
