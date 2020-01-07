@@ -366,6 +366,8 @@ typedef struct {
 	int reverse_twist;
 	int filter_dialtone;
 	int threshold;
+	float energy_ratio;
+	float relative_peak;
 	switch_audio_resampler_t *resampler;
 } switch_inband_dtmf_t;
 
@@ -410,7 +412,7 @@ static switch_bool_t inband_dtmf_callback(switch_media_bug_t *bug, void *user_da
 		if (pvt->verbose) {
 			span_log_set_level(dtmf_rx_get_logging_state(pvt->dtmf_detect), SPAN_LOG_SHOW_SEVERITY | SPAN_LOG_SHOW_PROTOCOL | SPAN_LOG_FLOW);
 		}
-		dtmf_rx_parms(pvt->dtmf_detect, pvt->filter_dialtone, (float)pvt->twist, (float)pvt->reverse_twist, (float)pvt->threshold);
+		dtmf_rx_parms(pvt->dtmf_detect, pvt->filter_dialtone, (float)pvt->twist, (float)pvt->reverse_twist, (float)pvt->threshold, (float)pvt->energy_ratio, (float)pvt->relative_peak);
 		dtmf_rx_set_realtime_callback(pvt->dtmf_detect, spandsp_dtmf_rx_realtime_callback, pvt);
 		break;
 	}
@@ -559,6 +561,29 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 		pvt->filter_dialtone = 1;
 	} else if (switch_false(value)) {
 		pvt->filter_dialtone = 0;
+	}
+
+	pvt->energy_ratio = -1;
+	value = switch_channel_get_variable(channel, "spandsp_dtmf_rx_energy_ratio");
+	if (!zstr(value) && switch_is_number(value)) {
+		int val = atof(value);
+		if (val < 0) {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "spandsp_dtmf_rx_energy_ratio must be >= 0 dB\n");
+		}
+		else {
+			pvt->energy_ratio = val;
+		}
+	}
+	pvt->relative_peak = -1;
+	value = switch_channel_get_variable(channel, "spandsp_dtmf_rx_relative_peak");
+	if (!zstr(value) && switch_is_number(value)) {
+		float val = atof(value);
+		if (val < 0) {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "spandsp_dtmf_rx_relative_peak must be >= 0 dB\n");
+		}
+		else {
+			pvt->relative_peak = val;
+		}
 	}
 
 	if ((value = switch_channel_get_variable(channel, "dtmf_verbose"))) {

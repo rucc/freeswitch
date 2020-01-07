@@ -197,6 +197,7 @@ SPAN_DECLARE(int) dtmf_rx(dtmf_rx_state_t *s, const int16_t amp[], int samples)
                 best_col = i;
         }
         hit = 0;
+        char* reason = "";
         /* Basic signal level test and the twist test */
         if (row_energy[best_row] >= s->threshold
             &&
@@ -209,21 +210,30 @@ SPAN_DECLARE(int) dtmf_rx(dtmf_rx_state_t *s, const int16_t amp[], int samples)
                 /* Relative peak test ... */
                 for (i = 0;  i < 4;  i++)
                 {
-                    if ((i != best_col  &&  col_energy[i]*DTMF_RELATIVE_PEAK_COL > col_energy[best_col])
+                    if ((i != best_col  &&  col_energy[i]*s->relative_peak > col_energy[best_col])
                         ||
-                        (i != best_row  &&  row_energy[i]*DTMF_RELATIVE_PEAK_ROW > row_energy[best_row]))
+                        (i != best_row  &&  row_energy[i]*s->relative_peak > row_energy[best_row]))
                     {
+                        reason = "relative peak fail";
                         break;
                     }
                 }
                 /* ... and fraction of total energy test */
                 if (i >= 4
                     &&
-                    (row_energy[best_row] + col_energy[best_col]) > DTMF_TO_TOTAL_ENERGY*s->energy)
+                    (row_energy[best_row] + col_energy[best_col]) > s->energy_ratio*s->energy)
                 {
                     /* Got a hit */
                     hit = dtmf_positions[(best_row << 2) + best_col];
                 }
+                 else
+                {
+                   reason = "total energy ratio fail";
+                }
+            }
+            else
+            {
+                reason = "twist fail";
             }
             if (span_log_test(&s->logging, SPAN_LOG_FLOW))
             {
@@ -233,13 +243,14 @@ SPAN_DECLARE(int) dtmf_rx(dtmf_rx_state_t *s, const int16_t amp[], int samples)
                    total, row and coloumn power levels for detailed analysis of detection problems. */
                 span_log(&s->logging,
                          SPAN_LOG_FLOW,
-                         "Potentially '%c' - total %.2fdB, row %.2fdB, col %.2fdB, duration %d - %s\n",
+                         "Potentially '%c' - total %.2fdB, row %.2fdB, col %.2fdB, duration %d - %s%s\n",
                          dtmf_positions[(best_row << 2) + best_col],
                          log10f(s->energy)*10.0f - DTMF_POWER_OFFSET + DBM0_MAX_POWER,
-                         log10f(row_energy[best_row]/DTMF_TO_TOTAL_ENERGY)*10.0f - DTMF_POWER_OFFSET + DBM0_MAX_POWER,
-                         log10f(col_energy[best_col]/DTMF_TO_TOTAL_ENERGY)*10.0f - DTMF_POWER_OFFSET + DBM0_MAX_POWER,
+                         log10f(row_energy[best_row]/s->energy_ratio)*10.0f - DTMF_POWER_OFFSET + DBM0_MAX_POWER,
+                         log10f(col_energy[best_col]/s->energy_ratio)*10.0f - DTMF_POWER_OFFSET + DBM0_MAX_POWER,
                          s->duration,
-                         (hit)  ?  "hit"  :  "miss");
+                         (hit)  ?  "hit"  :  "miss ",
+                         reason); 
             }
         }
         /* The logic in the next test should ensure the following for different successive hit patterns:
@@ -375,7 +386,9 @@ SPAN_DECLARE(void) dtmf_rx_parms(dtmf_rx_state_t *s,
                                  int filter_dialtone,
                                  float twist,
                                  float reverse_twist,
-                                 float threshold)
+                                 float threshold,
+                                 float energy_ratio,
+                                 float relative_peak)
 {
     float x;
 
@@ -391,6 +404,10 @@ SPAN_DECLARE(void) dtmf_rx_parms(dtmf_rx_state_t *s,
         s->normal_twist = powf(10.0f, twist/10.0f);
     if (reverse_twist >= 0)
         s->reverse_twist = powf(10.0f, reverse_twist/10.0f);
+    if (energy_ratio >= 0)
+		s->energy_ratio = energy_ratio;
+	if (relative_peak >= 0)
+		s->relative_peak = relative_peak;    
     if (threshold > -99)
     {
 #if defined(SPANDSP_USE_FIXED_POINT)

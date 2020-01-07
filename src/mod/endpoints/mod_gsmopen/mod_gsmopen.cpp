@@ -208,7 +208,7 @@ switch_status_t gsmopen_tech_init(private_t *tech_pvt, switch_core_session_t *se
 		return SWITCH_STATUS_FALSE;
 	}
 	dtmf_rx_init(&tech_pvt->dtmf_state, NULL, NULL);
-	dtmf_rx_parms(&tech_pvt->dtmf_state, 0, 10, 10, -99);
+	dtmf_rx_parms(&tech_pvt->dtmf_state, 0, 10, 10, -99, -1, -1);
 
 /*
 	if (tech_pvt->no_sound == 0) {

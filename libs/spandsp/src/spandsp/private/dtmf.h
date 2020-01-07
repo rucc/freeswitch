@@ -85,6 +85,10 @@ struct dtmf_rx_state_s
     float normal_twist;
     /*! Maximum acceptable "reverse" (higher bigger than lower) twist ratio. */
     float reverse_twist;
+    /*! Minimum acceptable dtmf energy / total energy ratio.*/
+	float energy_ratio;
+	/*! Minimum acceptable best dtmf component / second best component ratio. */
+	float relative_peak;
     /*! Minimum acceptable tone level for detection. */
     float threshold;
     /*! The accumlating total energy on the same period over which the Goertzels work. */

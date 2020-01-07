@@ -166,7 +166,9 @@ SPAN_DECLARE(void) dtmf_rx_parms(dtmf_rx_state_t *s,
                                  int filter_dialtone,
                                  float twist,
                                  float reverse_twist,
-                                 float threshold);
+                                 float threshold,
+                                 float energy_ratio,
+                                 float relative_peak);
 
 /*! Process a block of received DTMF audio samples.
     \brief Process a block of received DTMF audio samples.
