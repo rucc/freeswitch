@@ -75,6 +75,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_perform_file_open(const char *file, 
 	int is_stream = 0;
 	char *fp = NULL;
 	int to = 0;
+	int vol = 0;
 	int force_channels = 0;
 
 	if (switch_test_flag(fh, SWITCH_FILE_OPEN)) {
@@ -83,6 +84,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_perform_file_open(const char *file, 
 	}
 
 	fh->samples_in = 0;
+	fh->vol = 0;
 
 	if (!(flags & SWITCH_FILE_FLAG_WRITE)) {
 		fh->samplerate = 0;
@@ -127,6 +129,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_perform_file_open(const char *file, 
 	if (*file_path == '{') {
 		char *timeout;
 		char *modname;
+		char *volume;
 		const char *val;
 		int tmp;
 
@@ -150,6 +153,11 @@ SWITCH_DECLARE(switch_status_t) switch_core_perform_file_open(const char *file, 
 				to = 0;
 			}
 		}
+
+		if ((volume = switch_event_get_header(fh->params, "vol"))) {
+            vol = atoi(volume);
+            fh->vol = vol;
+        }
 
 		if ((modname = switch_event_get_header(fh->params, "modname"))) {
 			fh->modname = switch_core_strdup(fh->memory_pool, modname);
