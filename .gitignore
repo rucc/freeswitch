@@ -271,4 +271,4 @@ src/mod/applications/mod_http_cache/test/test-suite.log
 src/mod/applications/mod_http_cache/test/test_aws
 src/mod/applications/mod_http_cache/test/test_aws.log
 src/mod/applications/mod_http_cache/test/test_aws.trs
-
+*.vcxproj.user
