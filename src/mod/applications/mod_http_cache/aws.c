@@ -217,7 +217,7 @@ SWITCH_MOD_DECLARE(switch_status_t) aws_s3_config_profile(switch_xml_t xml, http
  * @param url
  * @return updated headers
  */
-SWITCH_MOD_DECLARE(switch_curl_slist_t*) aws_s3_append_headers(http_profile_t *profile, switch_curl_slist_t *headers,
+switch_curl_slist_t* aws_s3_append_headers(http_profile_t *profile, switch_curl_slist_t *headers,
 		const char *verb, unsigned int content_length, const char *content_type, const char *url, const unsigned int block_num, char **query_string)
 {
 	char date[256];
