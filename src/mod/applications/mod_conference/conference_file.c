@@ -284,6 +284,7 @@ switch_status_t conference_file_play(conference_obj_t *conference, char *file, u
 	if (fnode->fh.params) {
 		const char *vol = switch_event_get_header(fnode->fh.params, "vol");
 		const char *position = switch_event_get_header(fnode->fh.params, "position");
+		const char *offset = switch_event_get_header(fnode->fh.params, "offset");
 		const char *canvasstr = switch_event_get_header(fnode->fh.params, "canvas");
 		const char *loopsstr = switch_event_get_header(fnode->fh.params, "loops");
 		const char *overlay_layer = switch_event_get_header(fnode->fh.params, "overlay_layer");
@@ -345,6 +346,14 @@ switch_status_t conference_file_play(conference_obj_t *conference, char *file, u
 
 		if (!zstr(vol)) {
 			fnode->fh.vol = atoi(vol);
+		}
+
+		if (!zstr(offset)) {
+			unsigned int samps = 0;
+			unsigned int pos = 0;
+			samps = switch_atoui(offset);
+			switch_core_file_seek(&fnode->fh, &pos, 0, SEEK_SET);
+			switch_core_file_seek(&fnode->fh, &pos, samps, SEEK_CUR);
 		}
 
 		if (!bad_params && !zstr(position) && conference->channels == 2) {
