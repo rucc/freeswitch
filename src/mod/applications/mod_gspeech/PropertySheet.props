@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <GrpcRoot>D:\dev\freeswitch\cti\fs_build_scripts\grpcbuild\grpc</GrpcRoot>
+    <GrpcBuild>$(GrpcRoot)\vsbuild</GrpcBuild>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="UserMacros">
+    <LibPostfix>d</LibPostfix>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="UserMacros">
+    <LibPostfix></LibPostfix>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(GrpcRoot)\include;$(GrpcRoot)\third_party\protobuf\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x600;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(GrpcBuild)\$(Configuration);$(GrpcBuild)\third_party\boringssl\ssl\$(Configuration);$(GrpcBuild)\third_party\boringssl\crypto\fipsmodule\fipsmodule.dir\$(Configuration);$(GrpcBuild)\third_party\boringssl\crypto\$(Configuration);$(GrpcBuild)\third_party\protobuf\$(Configuration);$(GrpcBuild)\third_party\cares\cares\lib\$(Configuration);$(GrpcBuild)\third_party\zlib\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>grpc++.lib;grpc.lib;gpr.lib;upb.lib;address_sorting.lib;ssl.lib;crypto.lib;cares.lib;libprotobuf$(LibPostfix).lib;Zlibstatic$(LibPostfix).lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="GrpcRoot">
+      <Value>$(GrpcRoot)</Value>
+    </BuildMacro>
+    <BuildMacro Include="GrpcBuild">
+      <Value>$(GrpcBuild)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
