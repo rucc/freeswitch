@@ -1529,6 +1529,15 @@ static void our_sofia_event_callback(nua_event_t event,
 					return;
 				}
 
+				if (status == 100) {
+					switch_event_t* cust_event;
+					if (switch_event_create(&cust_event, SWITCH_EVENT_CHANNEL_CALLSTATE) == SWITCH_STATUS_SUCCESS) {
+						switch_event_add_header_string(cust_event, SWITCH_STACK_BOTTOM, "Trying-Received", "1");
+						switch_channel_event_set_data(channel, cust_event);
+						switch_event_fire(&cust_event);
+					}
+				}
+
 				if (status >= 180 && !*sofia_private->auth_gateway_name) {
 					const char *gwname = switch_channel_get_variable(channel, "sip_use_gateway");
 					if (!zstr(gwname)) {
@@ -3180,6 +3189,7 @@ void *SWITCH_THREAD_FUNC sofia_profile_thread_run(switch_thread_t *thread, void 
 								  NTATAG_TLS_RPORT(0),
 								  NUTAG_RETRY_AFTER_ENABLE(0),
 								  NUTAG_AUTO_INVITE_100(0),
+								  NTATAG_PASS_100(1),	
 								  TAG_IF(!strchr(profile->sipip, ':'),
 										 SOATAG_AF(SOA_AF_IP4_ONLY)),
 								  TAG_IF(strchr(profile->sipip, ':'),
