@@ -1279,6 +1279,14 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 
 
 	for (cur = 0; switch_channel_ready(channel) && !done && cur < argc; cur++) {
+		const int sp_fadeLen = 32;
+		const int sp_cut_src_rng = 64;
+		short sp_ovrlap[32];
+		short sp_has_overlap = 0;
+		int sp_prev_idx = 0;
+		int sp_prev_cap = 0;
+		short* sp_prev = NULL;
+
 		file = argv[cur];
 		eof = 0;
 
@@ -1588,15 +1596,6 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 			}
 			switch_event_fire(&event);
 		}
-
-		const int sp_fadeLen = 32;
-		const int sp_cut_src_rng = 64;
-		short sp_ovrlap[32];
-		short sp_has_overlap = 0;
-		int sp_prev_idx = 0;
-		int sp_prev_cap = 0;
-		short* sp_prev = NULL;
-
 		for (;;) {
 			int do_speed = 1;
 			int last_speed = -1;
@@ -1789,12 +1788,9 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 
 			if (!switch_test_flag(fh, SWITCH_FILE_NATIVE) && fh->speed && do_speed) {
 				float factor = 0.25f * abs(fh->speed);
-				switch_size_t newlen, supplement;
 				short* bp = write_frame.data;
-
-				supplement = (int) (factor * olen);
-				newlen = (fh->speed > 0) ? olen - supplement : olen + supplement;
-
+				switch_size_t supplement = (int) (factor * olen);
+				switch_size_t newlen = (fh->speed > 0) ? olen - supplement : olen + supplement;
 				int src_rng = (fh->speed > 0 ? supplement : sp_cut_src_rng)* sp_has_overlap;
 				int datalen = newlen + src_rng + sp_fadeLen;
 				int extra = datalen - olen;
@@ -1880,7 +1876,7 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 
 					if (sp_has_overlap)
 					{
-						short* ret = (short*)((byte*)switch_buffer_get_head_pointer(fh->sp_audio_buffer) + switch_buffer_inuse(fh->sp_audio_buffer) - 2 * newlen);
+						short* ret = (short*)((unsigned char*)switch_buffer_get_head_pointer(fh->sp_audio_buffer) + switch_buffer_inuse(fh->sp_audio_buffer) - 2 * newlen);
 						// crossfade
 						for (int i = 0; i < sp_fadeLen; i++)
 						{
