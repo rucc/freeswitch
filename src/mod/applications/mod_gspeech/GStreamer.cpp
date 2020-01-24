@@ -54,7 +54,6 @@ public:
 
 	void ShutDown()
 	{
-		m_shuttingDown = true;
 		m_strm->WritesDone();
 		m_rdrThread.join();
 	}
@@ -75,7 +74,7 @@ public:
 	bool GetResult()
 	{
 		StreamingRecognizeResponse response;
-		if (!m_shuttingDown && m_strm->Read(&response))
+		if (m_strm->Read(&response))
 		{
 			std::lock_guard<std::mutex> grd(m_resmtx);
 			RecogResults rrs;
@@ -112,7 +111,6 @@ public:
 	}
 
 private:
-	volatile bool m_shuttingDown = false;
 	std::shared_ptr<::grpc::Channel> m_chan;
 	std::shared_ptr<grpc_impl::ChannelCredentials> m_ccreds;
 	grpc::ClientContext m_ctx;
