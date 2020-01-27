@@ -3,10 +3,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 	void* gspeech_init(unsigned int sample_rate);
 
+	// this registers a logger function which will be invoked with msg and supplied arg ptr
+	void gspeech_register_logfunc(void (*fp) (char*), void* gstrmr);
+
 	void gspeech_shutdown(void* gstrmr);
+
+	void gspeech_shutdown_async(void* gstrmr);
 
 	void gspeech_stream_func(void* gstrmr, void* datap, int size);
 

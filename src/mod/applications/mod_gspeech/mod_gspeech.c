@@ -57,6 +57,11 @@ struct gspeech_bug_helper {
 	FILE* fp;
 };
 
+static void logfunc(char* msg)
+{
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, msg);
+}
+
 static switch_bool_t gspeech_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
 {
 	switch_core_session_t *session = switch_core_media_bug_get_session(bug);
@@ -94,6 +99,7 @@ static switch_bool_t gspeech_callback(switch_media_bug_t *bug, void *user_data, 
 
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "gspeech_init with sampling rate %d\n", rate);
 			rh->gstrmr = gspeech_init(rate);
+			gspeech_register_logfunc(&logfunc, rh->gstrmr);
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "gspeech_init done\n");
 			rh->last_res_cnt = 0;
 		}
@@ -108,7 +114,7 @@ static switch_bool_t gspeech_callback(switch_media_bug_t *bug, void *user_data, 
 	} break;
 	case SWITCH_ABC_TYPE_CLOSE: {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "gspeech_shutdown\n");
-		gspeech_shutdown(rh->gstrmr);
+		gspeech_shutdown_async(rh->gstrmr);
 		if (globals.rec && rh->fp)
 		{
 			fclose(rh->fp);
@@ -198,11 +204,13 @@ SWITCH_STANDARD_API(session_gspeech_stream_function)
 		stream->write_function(stream, "-ERR Cannot locate session!\n");
 		goto done;
 	}
+	switch_channel_t* channel = switch_core_session_get_channel(rsession);
+
+	switch_media_bug_t* bug;
+	bug = switch_channel_get_private(channel, "gspeech_bug");
+
 	if (!strcasecmp(action, "start"))
 	{
-		switch_channel_t* channel = switch_core_session_get_channel(rsession);
-
-		switch_media_bug_t* bug;
 		switch_status_t status;
 		time_t to = 0;
 		switch_media_bug_flag_t flags = SMBF_READ_STREAM | SMBF_READ_PING;
@@ -214,15 +222,14 @@ SWITCH_STANDARD_API(session_gspeech_stream_function)
 		if (!switch_channel_media_up(channel) || !switch_core_session_get_read_codec(rsession)) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rsession), SWITCH_LOG_ERROR,
 				"Can not record session.  Media not enabled on channel\n");
-			return SWITCH_STATUS_FALSE;
+			goto done;
 		}
 		switch_core_session_get_read_impl(rsession, &read_impl);
 		channels = read_impl.number_of_channels;
 
-		if ((bug = switch_channel_get_private(channel, "gspeech_bug"))) {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rsession), SWITCH_LOG_WARNING,
-				"Gspeech session already started\n");
-			return SWITCH_STATUS_SUCCESS;
+		if (bug != NULL) {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rsession), SWITCH_LOG_WARNING, "Gspeech session already started\n");
+			goto done;
 		}
 
 		rh = switch_core_session_alloc(rsession, sizeof(*rh));
@@ -238,7 +245,12 @@ SWITCH_STANDARD_API(session_gspeech_stream_function)
 		goto done;
 	}
 	else if (!strcasecmp(action, "stop")) {
-		return switch_core_media_bug_remove_callback(rsession, gspeech_callback);
+		if (bug == NULL)
+		{
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rsession), SWITCH_LOG_WARNING, "Gspeech session does not exist\n");
+			goto done;
+		}
+		return switch_core_media_bug_remove(rsession, bug);
 	}
 	else {
 		goto usage;

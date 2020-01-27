@@ -54,12 +54,28 @@ public:
 
 	void ShutDown()
 	{
+		Log("gspeech shutting down\n");
 		m_strm->WritesDone();
+		Log("gspeech write finished, joining rdr\n");
 		m_rdrThread.join();
 	}
 
 	GStreamer()
 	{
+		m_loggerFunc = NULL;
+	}
+
+	void Log(char* msg)
+	{
+		if (m_loggerFunc != NULL)
+		{
+			m_loggerFunc(msg);
+		}
+	}
+
+	void RegisterLogger(void (*lfp)(char*))
+	{
+		m_loggerFunc = lfp;
 	}
 
 	virtual ~GStreamer()
@@ -98,7 +114,9 @@ public:
 		}
 		else
 		{
+			Log("gspeech client read finished\n");
 			auto status = m_strm->Finish();
+			Log("gspeech client disposed\n");
 			return false;
 		}
 	}
@@ -111,6 +129,7 @@ public:
 	}
 
 private:
+	void (*m_loggerFunc) (char*);
 	std::shared_ptr<::grpc::Channel> m_chan;
 	std::shared_ptr<grpc_impl::ChannelCredentials> m_ccreds;
 	grpc::ClientContext m_ctx;
@@ -131,12 +150,32 @@ GStreamer* Cast(void* gstrmr)
 	return (GStreamer*)gstrmr;
 }
 
+void gspeech_register_logfunc(void (*fp) (char*), void* gstrmr)
+{
+	auto gs = Cast(gstrmr);
+	gs->RegisterLogger(fp);
+}
+
 void gspeech_shutdown(void* gstrmr)
 {
 	auto gs = Cast(gstrmr);
 	gs->ShutDown();
 	delete gs;
 }
+
+void gspeech_shutdown_async_worker(GStreamer* gs)
+{
+	gs->ShutDown();
+	delete gs;
+}
+
+void gspeech_shutdown_async(void* gstrmr)
+{
+	auto gs = Cast(gstrmr);
+	std::thread releaser(&gspeech_shutdown_async_worker, gs);
+	releaser.detach();
+}
+
 
 void gspeech_stream_func(void* gstrmr, void* datap, int size)
 {
