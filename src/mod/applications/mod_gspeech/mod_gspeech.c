@@ -250,7 +250,7 @@ SWITCH_STANDARD_API(session_gspeech_stream_function)
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rsession), SWITCH_LOG_WARNING, "Gspeech session does not exist\n");
 			goto done;
 		}
-		return switch_core_media_bug_remove(rsession, bug);
+		return switch_core_media_bug_remove(rsession, &bug);
 	}
 	else {
 		goto usage;
