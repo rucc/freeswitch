@@ -1279,6 +1279,14 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 
 
 	for (cur = 0; switch_channel_ready(channel) && !done && cur < argc; cur++) {
+		const int sp_fadeLen = 32;
+		const int sp_cut_src_rng = 64;
+		short sp_ovrlap[32];
+		short sp_has_overlap = 0;
+		int sp_prev_idx = 0;
+		int sp_prev_cap = 0;
+		short* sp_prev = NULL;
+
 		file = argv[cur];
 		eof = 0;
 
@@ -1474,11 +1482,6 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 
 		interval = read_impl.microseconds_per_packet / 1000;
 
-		if (!fh->audio_buffer) {
-			switch_buffer_create_dynamic(&fh->audio_buffer, FILE_BLOCKSIZE, FILE_BUFSIZE, 0);
-			switch_assert(fh->audio_buffer);
-		}
-
 		codec_name = "L16";
 
 		if (!switch_core_codec_ready((&codec))) {
@@ -1589,13 +1592,10 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 			switch_event_fire(&event);
 		}
 
-		const int sp_fadeLen = 32;
-		const int sp_cut_src_rng = 64;
-		short sp_ovrlap[32];
-		short sp_has_overlap = 0;
-		int sp_prev_idx = 0;
-		int sp_prev_cap = 0;
-		short* sp_prev = NULL;
+		if (!fh->audio_buffer) {
+			switch_buffer_create_dynamic(&fh->audio_buffer, FILE_BLOCKSIZE, FILE_BUFSIZE, 0);
+			switch_assert(fh->audio_buffer);
+		}
 
 		for (;;) {
 			int do_speed = 1;
@@ -1789,20 +1789,16 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 
 			if (!switch_test_flag(fh, SWITCH_FILE_NATIVE) && fh->speed && do_speed) {
 				float factor = 0.25f * abs(fh->speed);
-				switch_size_t newlen, supplement;
 				short* bp = write_frame.data;
-
-				supplement = (int) (factor * olen);
-				newlen = (fh->speed > 0) ? olen - supplement : olen + supplement;
-
+				switch_size_t supplement = (int) (factor * olen);
+				switch_size_t newlen = (fh->speed > 0) ? olen - supplement : olen + supplement;
 				int src_rng = (fh->speed > 0 ? supplement : sp_cut_src_rng)* sp_has_overlap;
 				int datalen = newlen + src_rng + sp_fadeLen;
 				int extra = datalen - olen;
 				short* data = NULL;
 				short* currp = NULL;
 				switch_zmalloc(data, datalen * 2);
-				if (sp_prev == NULL)
-				{
+				if (sp_prev == NULL) {
 					sp_prev_cap = olen * 16;
 					switch_zmalloc(sp_prev, sp_prev_cap * 2);
 				}
@@ -1810,46 +1806,37 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 					switch_buffer_create_dynamic(&fh->sp_audio_buffer, 1024, 1024, 0);
 				}
 
-				if (extra > 0)
-				{
+				if (extra > 0) {
 					int cont = 0;
 					currp = data;
 
-					if (extra > sp_prev_idx)
-					{
+					if (extra > sp_prev_idx) {
 						// not enough data
 						switch_buffer_write(fh->sp_audio_buffer, bp, newlen * 2);
 						cont = 1;
-					}
-					else
-					{
+					} else {
 						memcpy(currp, sp_prev + sp_prev_idx - extra, extra * 2);
 						memcpy(currp + extra, bp, olen * 2);
 					}
 
-					if (sp_prev_cap < 2 * olen)
-					{
+					if (sp_prev_cap < 2 * olen) {
 						switch_safe_free(sp_prev);
 						sp_prev_cap = olen * 16;
 						switch_zmalloc(sp_prev, sp_prev_cap * 2);
 						sp_prev_idx = 0;
 					}
 
-					if (sp_prev_idx > olen)
-					{
+					if (sp_prev_idx > olen) {
 						memmove(sp_prev, sp_prev + sp_prev_idx - olen, olen * 2);
 						sp_prev_idx = olen;
 					}
 					memcpy(sp_prev + sp_prev_idx, bp, olen * 2);
 					sp_prev_idx += olen;
 
-					if (cont)
-					{
+					if (cont) {
 						continue;
 					}
-				}
-				else
-				{
+				} else {
 					sp_prev_idx = 0;
 					extra = 0;
 					currp = bp;
@@ -1857,18 +1844,14 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 
 				if (fh->speed != 0) {
 					int best_cut_idx = 0;
-					if (sp_has_overlap)
-					{
+					if (sp_has_overlap) {
 						double best = INT_MIN;
-						for (int idx_src = 0; idx_src < src_rng; idx_src++)
-						{
+						for (int idx_src = 0; idx_src < src_rng; idx_src++) {
 							double cc = 0;
-							for (int i = 0; i < sp_fadeLen; i++)
-							{
+							for (int i = 0; i < sp_fadeLen; i++) {
 								cc += sp_ovrlap[i] * (*(currp + idx_src + i));
 							}
-							if (cc > best)
-							{
+							if (cc > best) {
 								best = cc;
 								best_cut_idx = idx_src;
 							}
@@ -1878,12 +1861,10 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_play_file(switch_core_session_t *sess
 					switch_buffer_write(fh->sp_audio_buffer, currp, newlen * 2);
 					currp += newlen;
 
-					if (sp_has_overlap)
-					{
-						short* ret = (short*)((byte*)switch_buffer_get_head_pointer(fh->sp_audio_buffer) + switch_buffer_inuse(fh->sp_audio_buffer) - 2 * newlen);
+					if (sp_has_overlap) {
+						short* ret = (short*)((unsigned char*)switch_buffer_get_head_pointer(fh->sp_audio_buffer) + switch_buffer_inuse(fh->sp_audio_buffer) - 2 * newlen);
 						// crossfade
-						for (int i = 0; i < sp_fadeLen; i++)
-						{
+						for (int i = 0; i < sp_fadeLen; i++) {
 							double factor = ((double)i) / sp_fadeLen;
 							*(ret + i) = (short)(sp_ovrlap[i] * (1 - factor) + *(ret + i) * factor);
 						}
