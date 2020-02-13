@@ -3458,7 +3458,7 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_session_audio(switch_core_session_t *
 			}
 		}
 	}
-
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "switch_ivr_session_audio read_mute: %d read_level: %d write_mute: %d write_level: %d\n", pvt->read_mute, pvt->read_level, pvt->write_mute, pvt->write_level);
 	if (existing) {
 		switch_core_media_bug_set_flag(bug, flags);
 	} else {
