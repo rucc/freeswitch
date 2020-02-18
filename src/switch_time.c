@@ -1079,7 +1079,6 @@ SWITCH_MODULE_RUNTIME_FUNCTION(softtimer_runtime)
 	}
 
 	switch_time_sync();
-	time_sync = runtime.time_sync;
 
 	globals.STARTED = globals.RUNNING = 1;
 	switch_mutex_lock(runtime.throttle_mutex);
@@ -1104,7 +1103,6 @@ SWITCH_MODULE_RUNTIME_FUNCTION(softtimer_runtime)
 		}
 	}
 
-	ts = 0;
 	last = 0;
 	fwd_errs = rev_errs = 0;
 
@@ -1318,7 +1316,6 @@ SWITCH_MODULE_RUNTIME_FUNCTION(softtimer_runtime)
 
 	if (tfd > -1) {
 		close(tfd);
-		tfd = -1;
 	}
 
 
@@ -1494,7 +1491,6 @@ SWITCH_DECLARE(switch_status_t) switch_strftime_tz(const char *tz, const char *f
 		tzdef = switch_lookup_timezone(tz_name);
 	} else {
 		/* We set the default timezone to GMT. */
-		tz_name = "GMT";
 		tzdef = "GMT";
 	}
 
