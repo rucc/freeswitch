@@ -6932,7 +6932,7 @@ void incoming_retransmit_reply(nta_incoming_t *irq, tport_t *tport)
       }
     }
 
-    tport = tport_tsend(tport, msg, irq->irq_tpn,
+    tport_tsend(tport, msg, irq->irq_tpn,
 			IF_SIGCOMP_TPTAG_COMPARTMENT(irq->irq_cc)
 			TPTAG_MTU(INT_MAX), TAG_END());
     irq->irq_agent->sa_stats->as_sent_msg++;
@@ -6967,7 +6967,7 @@ enum {
 static void
 _nta_incoming_timer(nta_agent_t *sa)
 {
-  uint32_t now = su_time_ms(su_now());
+  uint32_t now;
   nta_incoming_t *irq, *irq_next;
   size_t retransmitted = 0, timeout = 0, terminated = 0, destroyed = 0;
   size_t unconfirmed =
@@ -10546,11 +10546,12 @@ struct sipdns_tport const *
 outgoing_naptr_tport(nta_outgoing_t *orq, sres_record_t *answers[])
 {
   int i, j, order, pref;
-  int orders[SIPDNS_TRANSPORTS], prefs[SIPDNS_TRANSPORTS];
+  int orders[SIPDNS_TRANSPORTS] = {0}, prefs[SIPDNS_TRANSPORTS];
   struct sipdns_tport const *tport;
 
   struct sipdns_resolver *sr = orq->orq_resolver;
 
+  prefs[0] = 0;
   for (j = 0; sr->sr_tports[j]; j++) {
     tport = sr->sr_tports[j];
 

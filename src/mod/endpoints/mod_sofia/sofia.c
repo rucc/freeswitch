@@ -10077,7 +10077,7 @@ void sofia_handle_sip_i_reinvite(switch_core_session_t *session,
 	}
 
 	if (profile && sofia_test_pflag(profile, PFLAG_MANAGE_SHARED_APPEARANCE)) {
-		if (channel && sip->sip_call_info) {
+		if (channel && sip && sip->sip_call_info) {
 			char *p;
 			if ((call_info = sip_header_as_string(nua_handle_home(nh), (void *) sip->sip_call_info))) {
 				if (switch_stristr("appearance", call_info)) {
@@ -10097,7 +10097,7 @@ void sofia_handle_sip_i_reinvite(switch_core_session_t *session,
 		}
 		tech_pvt->mparams.last_sdp_str = NULL;
 
-		if (sip->sip_payload && sip->sip_payload->pl_data) {
+		if (sip && sip->sip_payload && sip->sip_payload->pl_data) {
 			if (!zstr(tech_pvt->mparams.prev_sdp_str) && strcmp(tech_pvt->mparams.prev_sdp_str, sip->sip_payload->pl_data)) {
 				switch_channel_set_variable(channel, "sip_reinvite_sdp", sip->sip_payload->pl_data);
 				tech_pvt->mparams.last_sdp_str = switch_core_session_strdup(session, sip->sip_payload->pl_data);
