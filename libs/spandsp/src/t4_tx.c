@@ -944,7 +944,7 @@ static int read_tiff_t85_image(t4_tx_state_t *s)
             break;
     }
     if (result == T4_DECODE_MORE_DATA)
-        result = t85_decode_put(&t85, NULL, 0);
+        t85_decode_put(&t85, NULL, 0);
 
     len = t85_decode_get_compressed_image_size(&t85);
     span_log(&s->logging, SPAN_LOG_WARNING, "Compressed image is %d bytes, %d rows\n", len/8, s->tiff.image_length);
@@ -1869,7 +1869,6 @@ SPAN_DECLARE(int) t4_tx_set_tx_image_format(t4_tx_state_t *s,
             break;
         }
     }
-    res = T4_IMAGE_FORMAT_NOSIZESUPPORT;
     s->row_squashing_ratio = 1;
     if (s->metadata.width_code >= 0  &&  (supported_image_sizes & s->metadata.width_code))
     {

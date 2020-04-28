@@ -2058,7 +2058,6 @@ SWITCH_DECLARE(switch_status_t) switch_loadable_module_build_dynamic(char *filen
 		}
 
 		if ((module = switch_core_alloc(pool, sizeof(switch_loadable_module_t))) == 0) {
-			err = "Could not allocate memory\n";
 			abort();
 		}
 
@@ -2697,7 +2696,7 @@ static void switch_loadable_module_sort_codecs(const switch_codec_implementation
 #endif
 		}
 
-		if (i > 0 && strcasecmp(array[i]->iananame, array[i-1]->iananame) && this_ptime != sorted_ptime) {
+		if (i > 0 && array[i-1] && strcasecmp(array[i]->iananame, array[i-1]->iananame) && this_ptime != sorted_ptime) {
 			int j;
 			int swapped = 0;
 
