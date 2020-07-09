@@ -415,7 +415,7 @@ static switch_status_t add_stream(av_file_context_t *context, MediaStream *mst, 
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	//int threads = switch_core_cpu_count();
 	int buffer_bytes = 2097152; /* 2 mb */
-	int fps = 15;
+	int fps = 30;
 
 	//if (mm->try_hardware_encoder && codec_id == AV_CODEC_ID_H264) {
 	//	*codec = avcodec_find_encoder_by_name("nvenc_h264");
@@ -493,6 +493,9 @@ GCC_DIAG_ON(deprecated-declarations)
 			mst->width = mm->vw;
 			mst->height = mm->vh;
 		}
+		/*TODO: check if need, see c->bit_rate setting below. One of them is necessary, but not both*/
+		if (mm->vb==0)
+			mm->vb = switch_calc_bitrate(mm->vw, mm->vh, 1, mm->fps);
 
 		c->codec_id = codec_id;
 
@@ -510,6 +513,9 @@ GCC_DIAG_ON(deprecated-declarations)
 		c->rc_initial_buffer_occupancy = buffer_bytes * 8;
 
 		if (codec_id == AV_CODEC_ID_H264) {
+			/*TODO: check if need, see mm->vb setting above. One of them is necessary, but not both*/
+			if (c->bit_rate == 0)
+				c->bit_rate = switch_calc_bitrate(c->width, c->height, 1, mm->fps) * 1024;
 			c->ticks_per_frame = 2;
 
 
