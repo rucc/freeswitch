@@ -888,6 +888,40 @@ static void login_fire_custom_event(jsock_t *jsock, cJSON *params, int success, 
 	}
 }
 
+static int verto_check_login_duplicated(const char *uuid, const char *uid,const char * duplication_restricted_new)
+{
+	jsock_t *jsock;
+	verto_profile_t *profile;
+	int result = 0;
+	const char * duplication_restricted_origin;
+
+	switch_mutex_lock(verto_globals.mutex);
+	for(profile = verto_globals.profile_head; profile; profile = profile->next) {
+
+		switch_mutex_lock(profile->mutex);
+
+		for(jsock = profile->jsock_head; jsock; jsock = jsock->next) {
+			if (!duplication_restricted_new || strcmp(duplication_restricted_new, "true"))
+			{
+				duplication_restricted_origin = switch_event_get_header(jsock->user_vars, "duplication_restricted");
+				if (!duplication_restricted_origin || strcmp(duplication_restricted_origin, "true"))
+					continue;
+			}
+
+			if (!zstr(jsock->uid) && !strcmp(uid, jsock->uid)) {
+				if (!zstr(jsock->uuid_str) && strcmp(uuid, jsock->uuid_str)) {
+					result = 1;
+				}
+			}
+		}
+
+		switch_mutex_unlock(profile->mutex);
+	}
+	switch_mutex_unlock(verto_globals.mutex);
+	return result;
+
+}
+
 static switch_bool_t check_auth(jsock_t *jsock, cJSON *params, int *code, char *message, switch_size_t mlen)
 {
 	switch_bool_t r = SWITCH_FALSE;
@@ -984,7 +1018,7 @@ static switch_bool_t check_auth(jsock_t *jsock, cJSON *params, int *code, char *
 				}
 			}
 		}
-
+		
 		switch_event_add_header_string(req_params, SWITCH_STACK_BOTTOM, "action", "jsonrpc-authenticate");
 
 		if (switch_xml_locate_user_merged("id", id, domain, NULL, &x_user, req_params) != SWITCH_STATUS_SUCCESS && !jsock->profile->blind_reg) {
@@ -1050,7 +1084,8 @@ static switch_bool_t check_auth(jsock_t *jsock, cJSON *params, int *code, char *
 			}
 
 
-			if (zstr(use_passwd) || strcmp(a1_hash ? a1_hash : passwd, use_passwd)) {
+			if (zstr(use_passwd) || strcmp(a1_hash ? a1_hash : passwd, use_passwd)
+				|| verto_check_login_duplicated(jsock->uuid_str, jsock->uid, switch_event_get_header(jsock->user_vars, "duplication_restricted"))) {
 				r = SWITCH_FALSE;
 				*code = CODE_AUTH_FAILED;
 				switch_snprintf(message, mlen, "Authentication Failure");
@@ -1124,6 +1159,18 @@ static jsock_t *get_jsock(const char *uuid)
 	return jsock;
 }
 
+static void set_dropped_flag(const char *jsock_uuid)
+{
+	verto_pvt_t *tech_pvt;
+	switch_thread_rwlock_rdlock(verto_globals.tech_rwlock);
+	for (tech_pvt = verto_globals.tech_head; tech_pvt; tech_pvt = tech_pvt->next) {
+		if (!strcmp(tech_pvt->jsock_uuid, jsock_uuid)) {
+			switch_set_flag(tech_pvt, TFLAG_DROPPED);
+		}
+	}
+	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+}
+
 static void attach_jsock(jsock_t *jsock)
 {
 	jsock_t *jp;
@@ -1141,6 +1188,7 @@ static void attach_jsock(jsock_t *jsock)
 			cJSON *msg = NULL;
 			msg = jrpc_new_req("verto.punt", NULL, &params);
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "New connection for session %s dropping previous connection.\n", jsock->uuid_str);
+			set_dropped_flag(jsock->uuid_str);
 			switch_core_hash_delete(verto_globals.jsock_hash, jsock->uuid_str);
 			ws_write_json(jp, &msg, SWITCH_TRUE);
 			cJSON_Delete(msg);
@@ -1200,6 +1248,7 @@ static void tech_reattach(verto_pvt_t *tech_pvt, jsock_t *jsock)
 	cJSON *msg = NULL;
 
 	tech_pvt->detach_time = 0;
+	switch_clear_flag(tech_pvt, TFLAG_DROPPED);
 	verto_globals.detached--;
 	attach_wake();
 	switch_set_flag(tech_pvt, TFLAG_ATTACH_REQ);
@@ -1238,31 +1287,66 @@ static void drop_detached(void)
 	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
 }
 
-static void attach_calls(jsock_t *jsock)
+static int check_uid(verto_pvt_t *tech_pvt, const char * jsock_uid)
+{
+	if (!tech_pvt || !tech_pvt->channel || strcmp(switch_channel_get_variable(tech_pvt->channel, "verto_user"), jsock_uid))
+		return 0;
+	//return true if and only if the uids are eq
+	return 1;
+}
+
+static int attach_calls(jsock_t *jsock)
 {
 	verto_pvt_t *tech_pvt;
 	cJSON *msg = NULL;
 	cJSON *params = NULL;
 	cJSON *reattached_sessions = NULL;
+	int result = 1;
+	
 
 	reattached_sessions = cJSON_CreateArray();
 
 	switch_thread_rwlock_rdlock(verto_globals.tech_rwlock);
 	for(tech_pvt = verto_globals.tech_head; tech_pvt; tech_pvt = tech_pvt->next) {
-		if (tech_pvt->detach_time && !strcmp(tech_pvt->jsock_uuid, jsock->uuid_str)) {
-			if (!switch_channel_up_nosig(tech_pvt->channel)) {
-				continue;
+		//if (!strcmp(tech_pvt->jsock_uuid, jsock->uuid_str)) {
+		if (!strcmp(tech_pvt->jsock_uuid, jsock->uuid_str)) {
+			//may be the uid different, but we hav to wait for the client thread to stop avoid cross reference hangup
+			if (!tech_pvt->detach_time && switch_test_flag(tech_pvt, TFLAG_DROPPED)) { 
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "[attach calls] postponed for %s\n",
+								  tech_pvt->jsock_uuid);
+				result = 0;
+				break;
 			}
 
-			tech_reattach(tech_pvt, jsock);
-			cJSON_AddItemToArray(reattached_sessions, cJSON_CreateString(jsock->uuid_str));
+			//at this moment the call with different uid is already stopped, we can purge it
+			else if (tech_pvt->detach_time) {
+				if (!switch_channel_up_nosig(tech_pvt->channel)) { continue; }
+
+				if (!check_uid(tech_pvt, jsock->uid)) //different user should be cleared
+				{
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "[attach calls] current user (%s) not eq the earlier call recovery not allowed %s\n",
+						jsock->uid, tech_pvt->jsock_uuid);
+					switch_channel_hangup(tech_pvt->channel, SWITCH_CAUSE_NORMAL_CLEARING);
+				}
+				else { //same user, reattach session
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "[attach calls] reattached for %s\n",
+						tech_pvt->jsock_uuid);
+					tech_reattach(tech_pvt, jsock);
+					cJSON_AddItemToArray(reattached_sessions, cJSON_CreateString(jsock->uuid_str));
+				}
+			} else {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "[attach calls] not assumed condition for %s\n",
+								  tech_pvt->jsock_uuid);
+			}
 		}
 	}
 	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+	if (result == 0) return 0;
 
 	msg = jrpc_new_req("verto.clientReady", NULL, &params);
 	cJSON_AddItemToObject(params, "reattached_sessions", reattached_sessions);
 	jsock_queue_event(jsock, &msg, SWITCH_TRUE);
+	return 1;
 }
 
 static void detach_calls(jsock_t *jsock)
@@ -1289,6 +1373,7 @@ static void detach_calls(jsock_t *jsock)
 
 			switch_core_session_stop_media(tech_pvt->session);
 			tech_pvt->detach_time = switch_epoch_time_now(NULL);
+			switch_clear_flag(tech_pvt, TFLAG_DROPPED);
 			verto_globals.detached++;
 			wake = 1;
 		}
@@ -1809,7 +1894,9 @@ done:
 				pflags = switch_wait_sock(jsock->client_socket, 3000, SWITCH_POLL_READ | SWITCH_POLL_ERROR | SWITCH_POLL_HUP);
 			}
 
-			if (jsock->drop) { die("%s Dropping Connection\n", jsock->name); }
+			if (jsock->drop) { 
+				die("%s Dropping Connection\n", jsock->name); 
+			}
 			if (pflags < 0 && (errno != EINTR)) { die_errnof("%s POLL FAILED with %d", jsock->name, pflags); }
 			if (pflags == 0) { /* keepalive socket poll timeout */ break; }
 			if (pflags > 0 && (pflags & SWITCH_POLL_HUP)) { log_and_exit(SWITCH_LOG_INFO, "%s POLL HANGUP DETECTED (peer closed its end of socket)\n", jsock->name); }
@@ -1884,9 +1971,17 @@ static void client_run(jsock_t *jsock)
 			pflags = switch_wait_sock(jsock->client_socket, 50, SWITCH_POLL_READ | SWITCH_POLL_ERROR | SWITCH_POLL_HUP);
 		}
 
-		if (jsock->drop) { die("%s Dropping Connection\n", jsock->name); }
+		if (jsock->drop) { 
+			die("%s Dropping Connection\n", jsock->name); 
+		}
 		if (pflags < 0 && (errno != EINTR)) { die_errnof("%s POLL FAILED with %d", jsock->name, pflags); }
-		if (pflags == 0) {/* socket poll timeout */ jsock_check_event_queue(jsock); }
+		if (pflags == 0) {/* socket poll timeout */ 
+			jsock_check_event_queue(jsock); 
+			if (!switch_test_flag(jsock, JPFLAG_CHECK_ATTACH) && switch_test_flag(jsock, JPFLAG_AUTHED)) {
+				if (attach_calls(jsock) > 0)
+					switch_set_flag(jsock, JPFLAG_CHECK_ATTACH);
+			}
+		}
 		if (pflags > 0 && (pflags & SWITCH_POLL_HUP)) { log_and_exit(SWITCH_LOG_INFO, "%s POLL HANGUP DETECTED (peer closed its end of socket)\n", jsock->name); }
 		if (pflags > 0 && (pflags & SWITCH_POLL_ERROR)) { die("%s POLL ERROR\n", jsock->name); }
 		if (pflags > 0 && (pflags & SWITCH_POLL_INVALID)) { die("%s POLL INVALID SOCKET (not opened or already closed)\n", jsock->name); }
@@ -1975,8 +2070,8 @@ static void client_run(jsock_t *jsock)
 				}
 
 				if (!switch_test_flag(jsock, JPFLAG_CHECK_ATTACH) && switch_test_flag(jsock, JPFLAG_AUTHED)) {
-					attach_calls(jsock);
-					switch_set_flag(jsock, JPFLAG_CHECK_ATTACH);
+					if (attach_calls(jsock) > 0)
+						switch_set_flag(jsock, JPFLAG_CHECK_ATTACH);
 				}
 			}
 		}
@@ -2138,6 +2233,7 @@ static void untrack_pvt(verto_pvt_t *tech_pvt)
 	if (tech_pvt->detach_time) {
 		verto_globals.detached--;
 		tech_pvt->detach_time = 0;
+		switch_clear_flag(tech_pvt, TFLAG_DROPPED);
 		wake = 1;
 	}
 
@@ -5584,7 +5680,6 @@ void verto_broadcast(const char *event_channel, cJSON *json, const char *key, sw
 
 	jsock_send_event(json);
 }
-
 
 static int verto_send_chat(const char *uid, const char *call_id, cJSON *msg)
 {
