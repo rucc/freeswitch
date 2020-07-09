@@ -1210,6 +1210,11 @@ void conference_xlist(conference_obj_t *conference, switch_xml_t x_conference, i
 		switch_xml_set_attr_d(x_conference, "endconference_grace_time", ival);
 	}
 
+	if (conference->conference_videofloor_handling > 0) {
+		switch_snprintf(i, sizeof(i), "%u", conference->conference_videofloor_handling);
+		switch_xml_set_attr_d(x_conference, "conference_videofloor_handling", ival);
+	}
+
 	if (conference_utils_test_flag(conference, CFLAG_VID_FLOOR)) {
 		switch_xml_set_attr_d(x_conference, "video_floor_only", "true");
 	}
@@ -2762,6 +2767,7 @@ conference_obj_t *conference_new(char *name, conference_xml_cfg_t cfg, switch_co
 	char *cdr_event_mode = NULL;
 	char *terminate_on_silence = NULL;
 	char *endconference_grace_time = NULL;
+	char *conference_videofloor_handling = NULL;
 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH+1];
 	switch_uuid_t uuid;
 	switch_codec_implementation_t read_impl = { 0 };
@@ -3088,6 +3094,8 @@ conference_obj_t *conference_new(char *name, conference_xml_cfg_t cfg, switch_co
 				terminate_on_silence = val;
 			} else if (!strcasecmp(var, "endconf-grace-time") && !zstr(val)) {
 				endconference_grace_time = val;
+			} else if (!strcasecmp(var, "conference-videofloor-handling") && !zstr(val)) {
+				conference_videofloor_handling = val;
 			} else if (!strcasecmp(var, "video-quality") && !zstr(val)) {
 				int tmp = atoi(val);
 
@@ -3653,7 +3661,9 @@ conference_obj_t *conference_new(char *name, conference_xml_cfg_t cfg, switch_co
 	if (!zstr(endconference_grace_time)) {
 		conference->endconference_grace_time = atoi(endconference_grace_time);
 	}
-
+	if (!zstr(conference_videofloor_handling)) {
+		conference->conference_videofloor_handling = atoi(conference_videofloor_handling);
+	}
 	if (!zstr(verbose_events) && switch_true(verbose_events)) {
 		conference->verbose_events = 1;
 	}

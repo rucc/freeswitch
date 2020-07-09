@@ -105,7 +105,7 @@ api_command_t conference_api_sub_commands[] = {
 	{"pin", (void_fn_t) & conference_api_sub_pin, CONF_API_SUB_ARGS_SPLIT, "pin", "<pin#>"},
 	{"nopin", (void_fn_t) & conference_api_sub_pin, CONF_API_SUB_ARGS_SPLIT, "nopin", ""},
 	{"get", (void_fn_t) & conference_api_sub_get, CONF_API_SUB_ARGS_SPLIT, "get", "<parameter-name>"},
-	{"set", (void_fn_t) & conference_api_sub_set, CONF_API_SUB_ARGS_SPLIT, "set", "<max_members|sound_prefix|caller_id_name|caller_id_number|endconference_grace_time> <value>"},
+	{"set", (void_fn_t) & conference_api_sub_set, CONF_API_SUB_ARGS_SPLIT, "set", "<max_members|sound_prefix|caller_id_name|caller_id_number|endconference_grace_time|conference_videofloor_handling> <value>"},
 	{"file-vol", (void_fn_t) & conference_api_sub_file_vol, CONF_API_SUB_ARGS_SPLIT, "file-vol", "<vol#>"},
 	{"floor", (void_fn_t) & conference_api_sub_floor, CONF_API_SUB_MEMBER_TARGET, "floor", "<member_id|last>"},
 	{"vid-floor", (void_fn_t) & conference_api_sub_vid_floor, CONF_API_SUB_MEMBER_TARGET, "vid-floor", "<member_id|last> [force]"},
@@ -4015,6 +4015,9 @@ switch_status_t conference_api_sub_get(conference_obj_t *conference,
 		} else if (strcasecmp(argv[2], "endconference_grace_time") == 0) {
 			stream->write_function(stream, "%d",
 								   conference->endconference_grace_time);
+		} else if (strcasecmp(argv[2], "conference_videofloor_handling") == 0) {
+			stream->write_function(stream, "%d",
+								   conference->conference_videofloor_handling);
 		} else if (strcasecmp(argv[2], "uuid") == 0) {
 			stream->write_function(stream, "%s",
 								   conference->uuid_str);
@@ -4062,6 +4065,10 @@ switch_status_t conference_api_sub_set(conference_obj_t *conference,
 			} else {
 				ret_status = SWITCH_STATUS_FALSE;
 			}
+		}
+		else if (strcasecmp(argv[2], "conference_videofloor_handling") == 0) {
+			stream->write_function(stream, "%d",
+				conference->conference_videofloor_handling);
 		} else {
 			ret_status = SWITCH_STATUS_FALSE;
 		}

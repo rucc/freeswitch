@@ -717,6 +717,9 @@ typedef struct conference_obj {
 	switch_time_t endconference_time;
 	int endconference_grace_time;
 
+	//need flag to special floor handling: presenter enabled if there is a floor/videofloor? + videofloor more important then floor?
+	int conference_videofloor_handling;
+
 	uint32_t relationship_total;
 	uint32_t score;
 	int mux_loop_count;
