@@ -405,6 +405,7 @@ struct vpx_context {
 	switch_buffer_t *vpx_packet_buffer;
 	int got_key_frame;
 	int no_key_frame;
+	int during_key_frame;
 	int got_start_frame;
 	uint32_t last_received_timestamp;
 	switch_bool_t last_received_complete_picture;
@@ -482,6 +483,7 @@ static switch_status_t init_decoder(switch_codec_t *codec)
 		context->decoder_init = 1;
 		context->got_key_frame = 0;
 		context->no_key_frame = 0;
+		context->during_key_frame = 0;
 		context->got_start_frame = 0;
 		// the types of post processing to be done, should be combination of "vp8_postproc_level"
 		ppcfg.post_proc_flag = VP8_DEBLOCK;//VP8_DEMACROBLOCK | VP8_DEBLOCK;
@@ -1111,6 +1113,7 @@ static switch_status_t buffer_vp9_packets(vpx_context_t *context, switch_frame_t
 	if (desc->have_pid) {
 #ifdef DEBUG_VP9
 		uint16_t pid = 0;
+
 		pid = *vp9 & 0x7f;	//0 bit is M , 1-7 bit is pid.
 #endif
 		if (*vp9 & 0x80) {	//if (M==1)
@@ -1247,16 +1250,27 @@ static switch_status_t switch_vpx_decode(switch_codec_t *codec, switch_frame_t *
 		is_keyframe = IS_VP8_KEY_FRAME((uint8_t *)frame->data);
 	}
 
-    if (!is_keyframe && context->got_key_frame <= 0) {
+	if (!is_keyframe && context->got_key_frame <= 0) {
 		context->no_key_frame++;
 		//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "no keyframe, %d\n", context->no_key_frame);
 		if (context->no_key_frame > 50) {
 			if ((is_keyframe = is_start)) {
 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG1, "no keyframe, treating start as key. frames=%d\n", context->no_key_frame);
+				if (context->no_key_frame > context->during_key_frame)
+				{
+					switch_channel_set_variable(switch_core_session_get_channel(codec->session), "bw_msr", "low");
+				}
 			}
 		}
-    }
-
+	}
+	if (!is_keyframe && context->got_key_frame > 0 && context->during_key_frame <100)
+	{
+		context->during_key_frame++;
+		if (context->during_key_frame > 50) {
+			context->during_key_frame = 100;
+			switch_channel_set_variable(switch_core_session_get_channel(codec->session), "bw_msr", NULL);
+		}
+	}
 	if (context->debug > 0 && is_keyframe) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "GOT KEY FRAME %d\n", context->got_key_frame);
 	}
@@ -1297,6 +1311,7 @@ static switch_status_t switch_vpx_decode(switch_codec_t *codec, switch_frame_t *
 		if (context->got_key_frame <= 0) {
 			context->got_key_frame = 1;
 			context->no_key_frame = 0;
+			context->during_key_frame = 0;
 		} else {
 			context->got_key_frame++;
 		}

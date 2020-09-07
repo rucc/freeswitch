@@ -36,6 +36,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <time.h>
+
 #ifdef WIN32
 #include <WinSock2.h>
 #else
@@ -61,6 +63,7 @@
 #endif
 #include <openssl/ssl.h>
 #include "mcast.h"
+
 
 #define MAX_QUEUE_LEN 100000
 #define MAX_MISSED 500
@@ -151,6 +154,9 @@ struct jsock_s {
 	switch_queue_t *event_queue;
 	int lost_events;
 	int ready;
+
+	clock_t check_clock;
+	time_t start_time;
 
 	struct jsock_s *next;
 };

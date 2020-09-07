@@ -4122,6 +4122,12 @@ static switch_bool_t ip_possible(switch_media_handle_t *smh, const char *ip)
 	if (strchr(ip, ':')) {
 		r = (switch_bool_t) !zstr(smh->mparams->rtpip6);
 	} else {
+		//mDNS hack
+		size_t ip_length = strlen(ip);
+		if (ip_length >= 6 && !strcmp(ip+ip_length-6,".local"))
+		{
+			return r;
+		}
 		r = (switch_bool_t) !zstr(smh->mparams->rtpip4);
 	}
 
@@ -14867,6 +14873,9 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_video_frame(switch_core
 	uint32_t loops = 0;
 	switch_media_handle_t *smh;
 	int is_keyframe = 0;
+	int output_sent = 0;
+	int copy_used = 0;
+	switch_frame_t frame_copy;
 
 	switch_assert(session != NULL);
 
@@ -14934,6 +14943,18 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_video_frame(switch_core
 		goto done;
 	}
 
+	if (switch_true(switch_channel_get_variable(session->channel, "video_passthrough_input"))) {
+		copy_used = 1;
+		if (status == SWITCH_STATUS_SUCCESS) {
+			
+			memcpy(&frame_copy, *frame, sizeof(switch_frame_t));
+			//switch_core_session_video_read_callback(session, &frame_copy);
+			
+			output_sent = 1;
+		}
+	}
+
+
 	if (switch_channel_test_flag(session->channel, CF_VIDEO_DECODED_READ) && (*frame)->img == NULL) {
 		switch_status_t decode_status;
 
@@ -14978,6 +14999,11 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_video_frame(switch_core
 		}
 
 		if (decode_status == SWITCH_STATUS_MORE_DATA || !(*frame)->img) {
+			if (output_sent)
+			{
+				output_sent = 0;
+				switch_core_session_video_read_callback(session, &frame_copy);
+			}
 			goto top;
 		}
 	}
@@ -15069,7 +15095,15 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_video_frame(switch_core
 	}
 
 	if (status == SWITCH_STATUS_SUCCESS) {
-		switch_core_session_video_read_callback(session, *frame);
+		if (!copy_used)
+			switch_core_session_video_read_callback(session, *frame);
+		else
+		{
+			if (output_sent)
+				switch_core_session_video_read_callback(session, &frame_copy);
+		}
+		
+//		switch_core_session_video_read_callback(session, *frame);
 	}
 
 	return status;

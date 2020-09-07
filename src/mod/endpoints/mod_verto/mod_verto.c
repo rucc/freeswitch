@@ -32,7 +32,7 @@
 #include <switch.h>
 #include <switch_json.h>
 #include <switch_stun.h>
-
+#include <time.h>
 
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_verto_shutdown);
@@ -68,6 +68,11 @@ SWITCH_MODULE_DEFINITION(mod_verto, mod_verto_load, mod_verto_shutdown, mod_vert
 #define die_errnof(fmt, ...) do { char errbuf[BUFSIZ] = {0}; strerror_r(errno, (char *)&errbuf, sizeof(errbuf)); die(fmt ", errno=%d, %s\n", __VA_ARGS__, errno, (char *)&errbuf); } while(0)
 
 static struct globals_s verto_globals;
+
+clock_t check_clock;
+
+//void channel_state_check();
+void channel_state_check_by_jsock(jsock_t *jsock);
 
 
 static struct {
@@ -683,7 +688,14 @@ static void write_event(const char *event_channel, jsock_t *use_jsock, cJSON *ev
 		}
 	}
 }
+static void jsock_send_event_to_jsock(cJSON *event, jsock_t *jsock)
+{
+	cJSON *msg = NULL, *params;
+	params = cJSON_Duplicate(event, 1);
+	msg = jrpc_new_req("verto.event", NULL, &params);
+	jsock_queue_event(jsock, &msg, SWITCH_TRUE);
 
+}
 static void jsock_send_event(cJSON *event)
 {
 
@@ -1449,6 +1461,7 @@ static cJSON *process_jrpc(jsock_t *jsock, cJSON *json)
 			goto end;
 		}
 		switch_set_flag(jsock, JPFLAG_AUTHED);
+		jsock->start_time = time(NULL);
 	}
 
 	if (!method || !(func = jrpc_get_func(jsock, method))) {
@@ -1541,6 +1554,7 @@ static void jsock_check_event_queue(jsock_t *jsock)
 		cJSON *json = (cJSON *) pop;
 		ws_write_json(jsock, &json, SWITCH_TRUE);
 	}
+	channel_state_check_by_jsock(jsock);
 	switch_mutex_unlock(jsock->write_mutex);
 }
 
@@ -3334,6 +3348,8 @@ static switch_bool_t verto__modify_func(const char *method, cJSON *params, jsock
 			switch_core_media_toggle_hold(session, 0);
 		} else if (!strcasecmp(action, "toggleHold")) {
 			switch_core_media_toggle_hold(session, !!!switch_channel_test_flag(tech_pvt->channel, CF_PROTO_HOLD));
+		} else if (!strcasecmp(action, "hangupMeasure")) {
+			switch_core_media_toggle_hold(session, 1);
 		}
 
 		cJSON_AddItemToObject(obj, "holdState", cJSON_CreateString(switch_channel_test_flag(tech_pvt->channel, CF_PROTO_HOLD) ? "held" : "active"));
@@ -3682,6 +3698,8 @@ static switch_bool_t verto__invite_func(const char *method, cJSON *params, jsock
 	const char *var, *destination_number, *call_id = NULL, *sdp = NULL,
 		*caller_id_name = NULL, *caller_id_number = NULL, *remote_caller_id_name = NULL, *remote_caller_id_number = NULL,*context = NULL;
 	switch_event_header_t *hp;
+	char string_buffer_for_timer[16];
+
 
 	*response = obj;
 
@@ -3720,6 +3738,15 @@ static switch_bool_t verto__invite_func(const char *method, cJSON *params, jsock
 	}
 
 	channel = switch_core_session_get_channel(session);
+	time_t acttime = time(NULL);
+	time_t time_spent = time(NULL) - jsock->start_time;
+	sprintf(string_buffer_for_timer, "%d", (int)time_spent);
+	switch_channel_set_variable(channel, "call_relative_start_time", string_buffer_for_timer);
+	sprintf(string_buffer_for_timer, "%d", (int)jsock->start_time;);
+	switch_channel_set_variable(channel, "session_start_time", string_buffer_for_timer);
+	sprintf(string_buffer_for_timer, "%d", (int)acttime);
+	switch_channel_set_variable(channel, "call_start_time", string_buffer_for_timer);
+
 	switch_channel_set_direction(channel, SWITCH_CALL_DIRECTION_INBOUND);
 
 	tech_pvt = switch_core_session_alloc(session, sizeof(*tech_pvt));
@@ -5113,7 +5140,9 @@ static int init(void)
 	}
 	switch_mutex_unlock(verto_globals.mutex);
 
+	check_clock = 0;
 	verto_globals.running = 1;
+	
 
 	return 0;
 }
@@ -6147,6 +6176,7 @@ static void presence_event_handler(switch_event_t *event)
 	}
 
 	if (!verto_globals.enable_presence || zstr(presence_id)) {
+		//channel_state_check();
 		return;
 	}
 
@@ -6378,7 +6408,190 @@ SWITCH_MODULE_RUNTIME_FUNCTION(mod_verto_runtime)
 	return SWITCH_STATUS_TERM;
 }
 
+//hangupMeasure
+void hangup_bw_measure(verto_pvt_t *tech_pvt)
+{
+	char limit_string[16];
+	clock_t act_clock = clock();
+	if (act_clock == 0)
+		act_clock = 1;
+	
+	switch_thread_rwlock_rdlock(verto_globals.tech_rwlock);
 
+	tech_pvt->suspended_clock = act_clock;
+
+	switch_channel_set_variable(tech_pvt->channel, "bw_msr", NULL);
+	switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
+	switch_channel_set_variable(tech_pvt->channel, "last_bw_msr",NULL);
+
+	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+
+
+}
+
+void channel_bw_state_send(verto_pvt_t *tech_pvt, jsock_t *jsock, switch_bool_t low)
+{
+	cJSON *msg,*data;
+	const char *event_channel = tech_pvt->jsock_uuid;
+	if (!event_channel)
+	{
+		return;
+	}
+	msg = cJSON_CreateObject();
+	data = json_add_child_obj(msg, "pvtData", NULL);
+	cJSON_AddItemToObject(msg, "eventChannel", cJSON_CreateString(event_channel));
+	cJSON_AddItemToObject(msg, "eventType", cJSON_CreateString("channelbwData"));
+	//tech_pvt->session
+	cJSON_AddStringToObject(data, "callID", switch_core_session_get_uuid(tech_pvt->session));
+
+	cJSON_AddItemToObject(data, "action", cJSON_CreateString(low ? "bwLow" : "bwOk"));
+	jsock_send_event_to_jsock(msg, jsock);
+
+}
+
+void channel_state_check_by_jsock(jsock_t *jsock)
+{
+	verto_pvt_t *tech_pvt;
+	switch_thread_rwlock_rdlock(verto_globals.tech_rwlock);
+	if (verto_globals.running != 1)
+	{
+		switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+		return;
+	}
+
+	clock_t act_clock = clock();
+	if (act_clock-jsock->check_clock<1000)
+	{
+		switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+		return;
+	}
+
+	jsock->check_clock = act_clock;
+
+	for (tech_pvt = verto_globals.tech_head; tech_pvt; tech_pvt = tech_pvt->next) {
+		if (!strcmp(tech_pvt->jsock_uuid, jsock->uuid_str)) {
+			//found, do it
+			if (!switch_channel_up_nosig(tech_pvt->channel)) {
+				break;
+			}
+			if (tech_pvt->suspended_clock != 0)
+			{
+				if (act_clock - tech_pvt->suspended_clock <= 3000)
+					break;
+				else
+					tech_pvt->suspended_clock = 0;
+			}
+			const char *bw_msr= switch_channel_get_variable(tech_pvt->channel, "bw_msr");
+			if (bw_msr && !strcmp(bw_msr, "low")) {
+				const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
+				if (last_bw_msr) {
+					const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
+					if (!bw_msr_msg) {
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "bandwidth handling: send low msg %s\n", jsock->name);
+						channel_bw_state_send(tech_pvt, jsock, 1);
+						switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
+					}
+				}
+				else
+				{
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "bandwidth handling: set up low msg %s\n", jsock->name);
+					switch_channel_set_variable(tech_pvt->channel, "last_bw_msr","low");
+					switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
+				}
+
+			}
+			else {
+				const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
+				if (last_bw_msr) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "bandwidth handling: set up ok msg %s\n", jsock->name);
+					switch_channel_set_variable(tech_pvt->channel, "last_bw_msr",NULL);
+					switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
+
+				}
+				else
+				{
+					const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
+					if (!bw_msr_msg) {
+						//send bw ok msg!!!
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "bandwidth handling: send ok msg %s\n", jsock->name);
+						switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
+						channel_bw_state_send(tech_pvt, jsock, 0);
+					}
+				}
+			}
+
+		}
+	}
+	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+}
+
+/*
+void channel_state_check()
+{
+	jsock_t *jsock;
+	verto_profile_t *profile;
+	verto_pvt_t *tech_pvt;
+	switch_thread_rwlock_rdlock(verto_globals.tech_rwlock);
+	if (verto_globals.running != 1)
+	{
+		switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+		return;
+	}
+	clock_t act_clock = clock();
+	if (act_clock-check_clock<1000)
+	{
+		switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+		return;
+	}
+
+	check_clock = act_clock;
+
+
+	for (tech_pvt = verto_globals.tech_head; tech_pvt; tech_pvt = tech_pvt->next) {
+		//if (!strcmp(tech_pvt->jsock_uuid, jsock->uuid_str)) {
+		if (!switch_channel_up_nosig(tech_pvt->channel)) {
+			continue;
+		}
+		const char *bw_msr= switch_channel_get_variable(tech_pvt->channel, "bw_msr");
+		if (bw_msr && !strcmp(bw_msr, "low")) {
+			const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
+			if (last_bw_msr) {
+				const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
+				if (!bw_msr_msg) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Low bandwith!\n"); //send low bw msg!!!
+					channel_bw_state_send(tech_pvt->channel, 1);
+					switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
+				}
+			}
+			else
+			{
+				switch_channel_set_variable(tech_pvt->channel, "last_bw_msr","low");
+				switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
+			}
+
+		}
+		else {
+			const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
+			if (last_bw_msr) {
+				switch_channel_set_variable(tech_pvt->channel, "last_bw_msr",NULL);
+				switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
+				
+			}
+			else
+			{
+				const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
+				if (!bw_msr_msg) {
+					//send bw ok msg!!!
+					switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
+					channel_bw_state_send(tech_pvt->channel, 0);
+				}
+			}
+		}
+
+	}
+	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+}
+*/
 /* For Emacs:
  * Local Variables:
  * mode:c
