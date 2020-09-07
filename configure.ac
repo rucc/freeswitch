@@ -3,10 +3,10 @@
 
 # Must change all of the below together
 # For a release, set revision for that tagged release as well and uncomment
-AC_INIT([freeswitch], [1.10.4-dev], bugs@freeswitch.org)
+AC_INIT([freeswitch], [1.10.6-dev], bugs@freeswitch.org)
 AC_SUBST(SWITCH_VERSION_MAJOR, [1])
 AC_SUBST(SWITCH_VERSION_MINOR, [10])
-AC_SUBST(SWITCH_VERSION_MICRO, [4-dev])
+AC_SUBST(SWITCH_VERSION_MICRO, [6-dev])
 AC_SUBST(SWITCH_VERSION_REVISION, [])
 AC_SUBST(SWITCH_VERSION_REVISION_HUMAN, [])
 
@@ -712,6 +712,16 @@ PKG_CHECK_MODULES([MARIADB], [libmariadb >= 3.0.9],[
     AM_CONDITIONAL([HAVE_MARIADB],[true])],[
     AC_MSG_RESULT([no]); AM_CONDITIONAL([HAVE_MARIADB],[false])
   ])
+])
+
+PKG_CHECK_MODULES([SPANDSP], [spandsp >= 3.0],[
+  AM_CONDITIONAL([HAVE_SPANDSP],[true])],[
+    AC_MSG_ERROR([no usable spandsp; please install spandsp3 devel package or equivalent])
+])
+
+PKG_CHECK_MODULES([SOFIA_SIP], [sofia-sip-ua >= 1.12.12],[
+  AM_CONDITIONAL([HAVE_SOFIA_SIP],[true])],[
+    AC_MSG_ERROR([no usable sofia-sip; please install sofia-sip-ua devel package or equivalent])
 ])
 
 AC_ARG_ENABLE(deprecated-core-db-events,
@@ -2104,10 +2114,8 @@ if test "$use_system_aprutil" != "yes"; then
 fi
 AC_CONFIG_SUBDIRS([libs/iksemel])
 AC_CONFIG_SUBDIRS([libs/libdingaling])
-AC_CONFIG_SUBDIRS([libs/sofia-sip])
 AC_CONFIG_SUBDIRS([libs/freetdm])
 AC_CONFIG_SUBDIRS([libs/unimrcp])
-AC_CONFIG_SUBDIRS([libs/spandsp])
 if test "x${enable_zrtp}" = "xyes"; then
    AC_CONFIG_SUBDIRS([libs/libzrtp])
 fi

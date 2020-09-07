@@ -305,7 +305,7 @@ print_source_control () {
 Source: freeswitch
 Section: comm
 Priority: optional
-Maintainer: FreeSWITCH Solutions, LLC <support@freeswitch.com>
+Maintainer: SignalWire, Inc <support@signalwire.com>
 Build-Depends:
 # for debian
  ${debhelper_dep},
@@ -332,7 +332,10 @@ Build-Depends:
  uuid-dev, libexpat1-dev, libgdbm-dev, libdb-dev,
 # used by many modules
  libcurl4-openssl-dev | libcurl4-gnutls-dev | libcurl-dev,
- bison, zlib1g-dev,
+ bison, zlib1g-dev, libsofia-sip-ua-dev (>= 1.12.12),
+ libspandsp3-dev,
+# used to format the private freeswitch apt-repo key properly
+ gnupg,
 # module build-depends
  $(debian_wrap "${mod_build_depends}")
 Standards-Version: 3.9.3
