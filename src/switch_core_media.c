@@ -4142,6 +4142,8 @@ static switch_status_t check_ice(switch_media_handle_t *smh, switch_media_type_t
 	int i = 0, got_rtcp_mux = 0;
 	const char *val;
 	int ice_seen = 0, cid = 0, ai = 0, attr_idx = 0, cand_seen = 0, relay_ok = 0;
+	int type_route[50][2];
+	int j;
 
 	if (switch_true(switch_channel_get_variable_dup(smh->session->channel, "ignore_sdp_ice", SWITCH_FALSE, -1))) {
 		return SWITCH_STATUS_BREAK;
@@ -4328,6 +4330,24 @@ static switch_status_t check_ice(switch_media_handle_t *smh, switch_media_type_t
 	}
 
 	relay_ok = 0;
+
+	for (cid = 0; cid < 2; cid++) {
+		int actstep = 0;
+		for (i = 0; i < engine->ice_in.cand_idx[cid]; i++) {
+			if (engine->ice_in.cands[i][cid].cand_type && (!strcmp(engine->ice_in.cands[i][cid].cand_type, "srflx") || !strcmp(engine->ice_in.cands[i][cid].cand_type, "prflx")))
+			{
+				type_route[actstep][cid] = i;
+				actstep++;
+			}
+		}
+		for (i = 0; i < engine->ice_in.cand_idx[cid]; i++) {
+			if (!(engine->ice_in.cands[i][cid].cand_type && (!strcmp(engine->ice_in.cands[i][cid].cand_type, "srflx") || !strcmp(engine->ice_in.cands[i][cid].cand_type, "prflx"))))
+			{
+				type_route[actstep][cid] = i;
+				actstep++;
+			}
+		}
+	}
 	
  relay:
 	
@@ -4335,7 +4355,8 @@ static switch_status_t check_ice(switch_media_handle_t *smh, switch_media_type_t
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(smh->session), SWITCH_LOG_DEBUG, "Searching for %s candidate.\n", cid ? "rtcp" : "rtp");
 
 		for (ai = 0; ai < engine->cand_acl_count; ai++) {
-			for (i = 0; i < engine->ice_in.cand_idx[cid]; i++) {
+			for (j = 0; j < engine->ice_in.cand_idx[cid]; j++) {
+				i = type_route[j][cid];
 				int is_relay = engine->ice_in.cands[i][cid].cand_type && !strcmp(engine->ice_in.cands[i][cid].cand_type, "relay");
 
 				if (relay_ok != is_relay) continue;

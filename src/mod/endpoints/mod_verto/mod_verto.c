@@ -73,7 +73,9 @@ clock_t check_clock;
 
 //void channel_state_check();
 void channel_state_check_by_jsock(jsock_t *jsock);
-
+void hangup_bw_measure(verto_pvt_t *tech_pvt);
+void stop_dynamic_record(switch_core_session_t *session);
+void start_dynamic_record(switch_core_session_t *session, jsock_t *jsock, char * additional_params);
 
 static struct {
 	switch_mutex_t *store_mutex;
@@ -3273,7 +3275,7 @@ static switch_bool_t verto__modify_func(const char *method, cJSON *params, jsock
 	cJSON *obj = cJSON_CreateObject();
 	switch_core_session_t *session;
 	cJSON *dialog = NULL;
-	const char *call_id = NULL, *destination = NULL, *action = NULL;
+	const char *call_id = NULL, *destination = NULL, *action = NULL, *additional_params = NULL;
 	int err = 0;
 
 	*response = obj;
@@ -3297,6 +3299,8 @@ static switch_bool_t verto__modify_func(const char *method, cJSON *params, jsock
 		cJSON_AddItemToObject(obj, "message", cJSON_CreateString("action missing"));
 		err = 1; goto cleanup;
 	}
+
+	additional_params = cJSON_GetObjectCstr(params, "params");
 
 	cJSON_AddItemToObject(obj, "callID", cJSON_CreateString(call_id));
 	cJSON_AddItemToObject(obj, "action", cJSON_CreateString(action));
@@ -3333,7 +3337,7 @@ static switch_bool_t verto__modify_func(const char *method, cJSON *params, jsock
 			}
 
 			if ((b_session = switch_core_session_locate(replace_call_id))) {
-				err = (int) !attended_transfer(session, b_session);
+				err = (int) attended_transfer(session, b_session);
 				if (err) {
 					cJSON_AddItemToObject(obj, "message", cJSON_CreateString("transfer failed"));
 				}
@@ -3349,8 +3353,19 @@ static switch_bool_t verto__modify_func(const char *method, cJSON *params, jsock
 		} else if (!strcasecmp(action, "toggleHold")) {
 			switch_core_media_toggle_hold(session, !!!switch_channel_test_flag(tech_pvt->channel, CF_PROTO_HOLD));
 		} else if (!strcasecmp(action, "hangupMeasure")) {
-			switch_core_media_toggle_hold(session, 1);
+			hangup_bw_measure(tech_pvt);
+			goto rwunlock;
+		} else if (!strcasecmp(action, "pingMessage")) {
+			jsock->ping_set = 1;
+			goto rwunlock;
+		} else if (!strcasecmp(action, "stopDynamicRecord")) {
+			stop_dynamic_record(session);
+			goto rwunlock;
+		} else if (!strcasecmp(action, "startDynamicRecord")) {
+			start_dynamic_record(session, jsock, additional_params);
+			goto rwunlock;
 		}
+
 
 		cJSON_AddItemToObject(obj, "holdState", cJSON_CreateString(switch_channel_test_flag(tech_pvt->channel, CF_PROTO_HOLD) ? "held" : "active"));
 
@@ -3742,7 +3757,7 @@ static switch_bool_t verto__invite_func(const char *method, cJSON *params, jsock
 	time_t time_spent = time(NULL) - jsock->start_time;
 	sprintf(string_buffer_for_timer, "%d", (int)time_spent);
 	switch_channel_set_variable(channel, "call_relative_start_time", string_buffer_for_timer);
-	sprintf(string_buffer_for_timer, "%d", (int)jsock->start_time;);
+	sprintf(string_buffer_for_timer, "%d", (int)jsock->start_time);
 	switch_channel_set_variable(channel, "session_start_time", string_buffer_for_timer);
 	sprintf(string_buffer_for_timer, "%d", (int)acttime);
 	switch_channel_set_variable(channel, "call_start_time", string_buffer_for_timer);
@@ -6408,7 +6423,16 @@ SWITCH_MODULE_RUNTIME_FUNCTION(mod_verto_runtime)
 	return SWITCH_STATUS_TERM;
 }
 
-//hangupMeasure
+
+int is_channel_variable_equal(switch_channel_t *channel, const char *varname, const char *test)
+{
+	const char * varvalue = switch_channel_get_variable_dup(channel, varname, SWITCH_FALSE, -1);
+	if (varvalue && !strcmp(varvalue, test)) {
+		return 1;
+	}
+	return 0;
+}
+
 void hangup_bw_measure(verto_pvt_t *tech_pvt)
 {
 	char limit_string[16];
@@ -6429,25 +6453,47 @@ void hangup_bw_measure(verto_pvt_t *tech_pvt)
 
 }
 
-void channel_bw_state_send(verto_pvt_t *tech_pvt, jsock_t *jsock, switch_bool_t low)
+void send_pvtData_to_jsock(jsock_t *jsock, char * session, const char * event_channel, const char * event_type, const char * action)
 {
 	cJSON *msg,*data;
-	const char *event_channel = tech_pvt->jsock_uuid;
-	if (!event_channel)
-	{
+	if (!event_channel || !event_type || !jsock || !session || !action)
 		return;
-	}
 	msg = cJSON_CreateObject();
 	data = json_add_child_obj(msg, "pvtData", NULL);
 	cJSON_AddItemToObject(msg, "eventChannel", cJSON_CreateString(event_channel));
-	cJSON_AddItemToObject(msg, "eventType", cJSON_CreateString("channelbwData"));
+	cJSON_AddItemToObject(msg, "eventType", cJSON_CreateString(event_type));
 	//tech_pvt->session
-	cJSON_AddStringToObject(data, "callID", switch_core_session_get_uuid(tech_pvt->session));
+	cJSON_AddStringToObject(data, "callID", switch_core_session_get_uuid(session));
 
-	cJSON_AddItemToObject(data, "action", cJSON_CreateString(low ? "bwLow" : "bwOk"));
+	cJSON_AddItemToObject(data, "action", cJSON_CreateString(action));
 	jsock_send_event_to_jsock(msg, jsock);
+	cJSON_Delete(msg);
 
 }
+
+
+
+void channel_bw_state_send(verto_pvt_t *tech_pvt, jsock_t *jsock, switch_bool_t low)
+{
+	send_pvtData_to_jsock(jsock, tech_pvt->session, tech_pvt->jsock_uuid, "channelbwData", (low ? "bwLow" : "bwOk"));
+}
+
+void channel_ping_answer(jsock_t *jsock)
+{
+	cJSON *msg,*data;
+	verto_pvt_t *tech_pvt;
+
+	if (!jsock->ping_set)
+		return;
+	jsock->ping_set = 0;
+	for (tech_pvt = verto_globals.tech_head; tech_pvt; tech_pvt = tech_pvt->next) {
+		if (!strcmp(tech_pvt->jsock_uuid, jsock->uuid_str)) {
+			send_pvtData_to_jsock(jsock, tech_pvt->session, tech_pvt->jsock_uuid, "channelPing", "channelPing");
+			return;
+		}
+	}
+}
+
 
 void channel_state_check_by_jsock(jsock_t *jsock)
 {
@@ -6458,6 +6504,7 @@ void channel_state_check_by_jsock(jsock_t *jsock)
 		switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
 		return;
 	}
+	channel_ping_answer(jsock);
 
 	clock_t act_clock = clock();
 	if (act_clock-jsock->check_clock<1000)
@@ -6481,12 +6528,10 @@ void channel_state_check_by_jsock(jsock_t *jsock)
 				else
 					tech_pvt->suspended_clock = 0;
 			}
-			const char *bw_msr= switch_channel_get_variable(tech_pvt->channel, "bw_msr");
-			if (bw_msr && !strcmp(bw_msr, "low")) {
-				const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
-				if (last_bw_msr) {
-					const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
-					if (!bw_msr_msg) {
+			int islow = is_channel_variable_equal(tech_pvt->channel, "bw_msr", "low");
+			if (islow) {
+				if (switch_channel_get_variable_dup(tech_pvt->channel, "last_bw_msr", SWITCH_FALSE, -1)) {
+					if (!switch_channel_get_variable_dup(tech_pvt->channel, "bw_msr_msg", SWITCH_FALSE, -1)) {
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "bandwidth handling: send low msg %s\n", jsock->name);
 						channel_bw_state_send(tech_pvt, jsock, 1);
 						switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
@@ -6501,8 +6546,7 @@ void channel_state_check_by_jsock(jsock_t *jsock)
 
 			}
 			else {
-				const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
-				if (last_bw_msr) {
+				if (switch_channel_get_variable_dup(tech_pvt->channel, "last_bw_msr", SWITCH_FALSE, -1)) {
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "bandwidth handling: set up ok msg %s\n", jsock->name);
 					switch_channel_set_variable(tech_pvt->channel, "last_bw_msr",NULL);
 					switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
@@ -6510,8 +6554,7 @@ void channel_state_check_by_jsock(jsock_t *jsock)
 				}
 				else
 				{
-					const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
-					if (!bw_msr_msg) {
+					if (!switch_channel_get_variable_dup(tech_pvt->channel, "bw_msr_msg", SWITCH_FALSE, -1)) {
 						//send bw ok msg!!!
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "bandwidth handling: send ok msg %s\n", jsock->name);
 						switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
@@ -6525,73 +6568,63 @@ void channel_state_check_by_jsock(jsock_t *jsock)
 	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
 }
 
-/*
-void channel_state_check()
+void stop_dynamic_record(switch_core_session_t *session)
 {
-	jsock_t *jsock;
-	verto_profile_t *profile;
-	verto_pvt_t *tech_pvt;
-	switch_thread_rwlock_rdlock(verto_globals.tech_rwlock);
-	if (verto_globals.running != 1)
+	/*assumed that session is locked*/
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	if (!channel || !switch_channel_get_variable_dup(channel, "dynamic_record_destination", SWITCH_FALSE, -1))
 	{
-		switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
 		return;
 	}
-	clock_t act_clock = clock();
-	if (act_clock-check_clock<1000)
-	{
-		switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
-		return;
-	}
-
-	check_clock = act_clock;
-
-
-	for (tech_pvt = verto_globals.tech_head; tech_pvt; tech_pvt = tech_pvt->next) {
-		//if (!strcmp(tech_pvt->jsock_uuid, jsock->uuid_str)) {
-		if (!switch_channel_up_nosig(tech_pvt->channel)) {
-			continue;
-		}
-		const char *bw_msr= switch_channel_get_variable(tech_pvt->channel, "bw_msr");
-		if (bw_msr && !strcmp(bw_msr, "low")) {
-			const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
-			if (last_bw_msr) {
-				const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
-				if (!bw_msr_msg) {
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Low bandwith!\n"); //send low bw msg!!!
-					channel_bw_state_send(tech_pvt->channel, 1);
-					switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
-				}
-			}
-			else
-			{
-				switch_channel_set_variable(tech_pvt->channel, "last_bw_msr","low");
-				switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
-			}
-
-		}
-		else {
-			const char *last_bw_msr = switch_channel_get_variable(tech_pvt->channel, "last_bw_msr");
-			if (last_bw_msr) {
-				switch_channel_set_variable(tech_pvt->channel, "last_bw_msr",NULL);
-				switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", NULL);
-				
-			}
-			else
-			{
-				const char *bw_msr_msg = switch_channel_get_variable(tech_pvt->channel, "bw_msr_msg");
-				if (!bw_msr_msg) {
-					//send bw ok msg!!!
-					switch_channel_set_variable(tech_pvt->channel, "bw_msr_msg", "sent");
-					channel_bw_state_send(tech_pvt->channel, 0);
-				}
-			}
-		}
-
-	}
-	switch_thread_rwlock_unlock(verto_globals.tech_rwlock);
+	//switch_ivr_stop_record_session(session, "all");
+	switch_core_media_bug_pause(session);
 }
-*/
+void start_dynamic_record(switch_core_session_t *session, jsock_t *jsock, const char * additional_params)
+{
+	/*assumed that session is locked*/
+	size_t i;
+	char * expanded = NULL;
+	char string_buffer_for_timer[16];
+	const char * dynamic_recording_data;
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	if (!channel || !switch_channel_get_variable_dup(channel, "dynamic_record_destination", SWITCH_FALSE, -1))
+	{
+		return;
+	}
+	if (zstr(jsock->dynamic_recording_descriptor))
+	{
+		dynamic_recording_data = switch_channel_get_variable(channel, "dynamic_record_destination");
+		jsock->dynamic_recording_descriptor = switch_core_strdup(jsock->pool, dynamic_recording_data);
+		for (i = 0; i < strlen(jsock->dynamic_recording_descriptor); i++)
+		{
+			if (jsock->dynamic_recording_descriptor[i] == '#')
+				jsock->dynamic_recording_descriptor[i] = '$';
+		}
+	}
+	//switch_core_strdup(jsock->pool, login);
+
+	time_t acttime = time(NULL);
+	time_t time_spent = time(NULL) - jsock->start_time;
+	sprintf(string_buffer_for_timer, "%d", (int)time_spent);
+	switch_channel_set_variable(channel, "call_relative_start_time", string_buffer_for_timer);
+	sprintf(string_buffer_for_timer, "%d", (int)acttime);
+	switch_channel_set_variable(channel, "call_start_time", string_buffer_for_timer);
+	switch_channel_set_variable(channel, "actual_label",additional_params);
+
+	
+	
+	expanded = switch_channel_expand_variables(channel, jsock->dynamic_recording_descriptor);
+
+
+	//switch_ivr_record_session_event(session,expanded, 0, NULL, NULL);
+	
+	switch_core_media_bug_resume(session);
+	if (expanded != dynamic_recording_data) {
+		switch_safe_free(expanded);
+	}
+
+}
+
 /* For Emacs:
  * Local Variables:
  * mode:c

@@ -158,6 +158,10 @@ struct jsock_s {
 	clock_t check_clock;
 	time_t start_time;
 
+	int ping_set;
+
+	char * dynamic_recording_descriptor;
+
 	struct jsock_s *next;
 };
 
@@ -203,6 +207,9 @@ typedef struct verto_pvt_s {
 
 	switch_buffer_t *text_read_buffer;
 	switch_buffer_t *text_write_buffer;
+
+	clock_t suspended_clock;
+
 
 } verto_pvt_t;
 

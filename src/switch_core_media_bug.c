@@ -678,7 +678,7 @@ static void *SWITCH_THREAD_FUNC video_bug_thread(switch_thread_t *thread, void *
 		if (other_q) {
 			flush_video_queue(other_q, 1);
 
-			if ((status = switch_queue_trypop(other_q, &other_pop)) == SWITCH_STATUS_SUCCESS) {
+			if (((status = switch_queue_trypop(other_q, &other_pop)) == SWITCH_STATUS_SUCCESS) && other_pop) {
 				switch_img_free(&other_img);
 				other_img = (switch_image_t *) other_pop;
 

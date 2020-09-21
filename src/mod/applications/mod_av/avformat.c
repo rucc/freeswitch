@@ -2713,6 +2713,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_avformat_load)
 	supported_formats[i++] = "mov";
 	supported_formats[i++] = "mkv";
 	supported_formats[i++] = "webm";
+	supported_formats[i++] = "m4v";
 	//supported_formats[i++] = "wav";
 
 	file_interface = (switch_file_interface_t *)switch_loadable_module_create_interface(*module_interface, SWITCH_FILE_INTERFACE);
